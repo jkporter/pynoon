@@ -220,11 +220,12 @@ class NoonSpace(NoonEntity):
 
         self.setSceneActive(active=False)
 
-    def __init__(self, noon, guid, name, activeScene=None, lightsOn=None, lines={}, scenes={}):
+    def __init__(self, noon, guid, name, activeScene=None, lightsOn=None, devices={}, lines={}, scenes={}):
         
         """Initializes the Space."""
         self._activeScene = None
         self._lightsOn = None
+        self._devices = devices
         self._lines = lines
         self._scenes = scenes
         super(NoonSpace, self).__init__(noon, guid, name)
@@ -270,6 +271,13 @@ class NoonSpace(NoonEntity):
             scenesMap[thisScene.guid] = thisScene
         newSpace._scenes = scenesMap
 
+        """Devices"""
+        devicesMap = {}
+        for device in json.get("devices", []):
+            thisDevice = NoonDevice.fromJsonObject(noon, newSpace, device)
+            devicesMap[thisDevice.guid] = thisScene
+        newSpace._devices = devicesMap
+
         """Lines"""
         linesMap = {}
         for line in json.get("lines", []):
@@ -285,6 +293,96 @@ class NoonSpace(NoonEntity):
         
         return newSpace
 
+class NoonDevice(NoonEntity):
+
+    @property
+    def capabilities(self) -> Dict:
+        return self._capabilities
+    @property
+    def name(self) -> str:
+        return self._name
+    @property
+    def batteryLevel(self) -> int:
+        return self._batteryLevel
+    @property
+    def base(self) -> Dict:
+        return self._base
+    #@property
+    #def name(self):
+    #    return self._name
+    @property
+    def line(self):
+        return self._noon.devices.get[self._line.get("guid")]
+    #@property
+    #def type(self):
+    #    return self._type
+    @property
+    def scenesAllowed(self) -> bool:
+        return self._scenesAllowed
+    @property
+    def isMaster(self) -> bool:
+        return self._isMaster
+    @property
+    def isOnline(self) -> bool:
+        return self._isOnline
+    @property
+    def softwareVersion(self) -> str:
+        return self._softwareVersion
+
+    
+
+    def __init__(self, noon, space: NoonSpace, guid, name: str, capabilities: Dict, batteryLevel: int, base: Dict, line, scenesAllowed: bool, isMaster: bool, isOnline: bool, softwareVersion: str):
+        
+        """Initializes the Space."""
+        self._parentSpace: NoonSpace = space
+        self._capabilities = capabilities
+        self._batteryLevel = batteryLevel
+        self._base = base
+        self._line = line
+        self._scenesAllowed = scenesAllowed
+        self._isMaster = isMaster
+        self._isOnline = isOnline
+        self._softwareVersion = softwareVersion
+        super(NoonDevice, self).__init__(noon, guid, name)
+
+    @classmethod
+    def fromJsonObject(cls, noon, space: NoonSpace, json: Dict):
+
+        """Sanity Check"""
+        if not isinstance(noon, Noon):
+            _LOGGER.error("Noon object not correctly passed as a parameter")
+            raise NoonInvalidParametersError
+        if not isinstance(json, Dict):
+            _LOGGER.error("JSON object must be pre-parsed before loading")
+            raise NoonInvalidParametersError
+
+        """Basics"""
+        guid = json.get("guid", None)
+        name = json.get("displayName", None)
+        capabilities = json.get("capabilities", None)
+        batteryLevel = json.get("batteryLevel", None)
+        base = json.get("base", None)
+        line = json.get("line", None)
+        scenesAllowed = json.get("scenesAllowed", None)
+        isMaster = json.get("isMaster", None)
+        isOnline = json.get("isOnline", None)
+        softwareVersion = json.get("softwareVersion", None)
+
+        if guid is None or name is None:
+            _LOGGER.debug("Invalid JSON payload: {}".format(json))
+            raise NoonInvalidJsonError
+        newDevice = NoonDevice(noon, space, guid, name, capabilities, batteryLevel, base, line, scenesAllowed, isMaster, isOnline, softwareVersion)
+
+        return newDevice
+
+    def __str__(self):
+        """Returns a pretty-printed string for this object."""
+        return 'Line name: "%s" lights on: %s, dim level: "%s"' % (
+            self._name)
+
+    def __repr__(self):
+        """Returns a stringified representation of this object."""
+        return str({'name': self._name, 'id': self._guid})
 
 class NoonLine(NoonEntity):
 
@@ -436,13 +534,16 @@ class NoonScene(NoonEntity):
         """Returns a stringified representation of this object."""
         return str({'name': self._name, 'id': self._guid})
 
-
 class Noon(object):
     """ Base object for Noon Home """
 
     @property
     def spaces(self):
         return self.__spaces
+
+    @property
+    def devices(self):
+        return self.__devices
 
     @property
     def lines(self):
@@ -477,6 +578,7 @@ class Noon(object):
 
         # External Properties
         self.__spaces = {}
+        self.__devices = {}
         self.__lines = {}
         self.__scenes = {}
         self.__allEntities = {}
@@ -551,6 +653,18 @@ class Noon(object):
                     return
             else:
                 self.__spaces[entity.guid] = entity	
+        
+        """ DEVICE """
+        if isinstance(entity, NoonDevice):
+            existingEntity = self.__devices.get(entity.guid, None)
+            if existingEntity is not None:
+                if entity.name != existingEntity.name and False:
+                    _LOGGER.error("New device '{}' has same ID as existing device '{}'".format(entity.name, existingEntity.name))
+                    raise NoonDuplicateIdError
+                else:
+                    return
+            else:
+                self.__devices[entity.guid] = entity	
 
         """ LINE """
         if isinstance(entity, NoonLine):
@@ -586,8 +700,8 @@ class Noon(object):
         """ Get the device details for this account """
         _LOGGER.debug("Refreshing devices...")
         queryUrl = "{}/api/query".format(self.__endpoints["query"])
-        result = self.__session.post(queryUrl, headers={"Authorization": "Token {}".format(self.__token), "Content-Type":"application/graphql"}, data="{spaces {guid name lightsOn activeScene{guid name} lines{guid lineState displayName dimmingLevel multiwayMaster { guid }} scenes{name guid}}}").json()
-        if isinstance(result, dict) and isinstance(result.get("spaces"), list):
+        result = self.__session.post(queryUrl, headers={"Authorization": "Token {}".format(self.__token), "Content-Type":"application/graphql"}, data="{ lease { structure { guid, name, icon, sceneOrder, spaces { name, icon, guid, type, lightsOn, lightingConfigModified, devices { name, guid, type, isMaster, isOnline, displayName, softwareVersion, expectedSoftwareVersion, batteryLevel, expectedLinesGuid, actualLinesGuid, expectedScenesGuid, actualScenesGuid, scenesAllowed, line { guid }, otaState { guid, type, retryCount, installState, percentDownloaded }, base { guid, firmwareVersion, serial, capabilities { dimming, powerRating } }, capabilities { iconSet, maxScenes, hue, gridView, dimmingBase, dimming, wholeHomeScenes } }, lines {  guid, displayName, lineState, dimmingLevel, dimmable, remoteControllable, bulbType, multiwayMaster { guid }, lights { guid, fixtureType, bulbBrand, bulbQuantity }, externalDevices { externalId, isOnline} }, subspaces { guid, name, lines { guid }, type }, sceneOrder,  activeSceneSchedule { guid }, scenes { guid, icon, name, type, isActive, lightLevels { recommendedMax, recommendedMin, value, lineState, line { guid, lineState, dimmingLevel, displayName, bulbType, remoteControllable } } }, activeScene { guid, name, icon } } } } }").json()
+        if isinstance(result, dict) and isinstance(result.get("lease").get("structure").get("spaces"), list):
             for space in result.get("spaces"):
 
                 # Create the space
