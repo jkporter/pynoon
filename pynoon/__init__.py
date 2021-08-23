@@ -6,6 +6,8 @@ Note that this API is not supported by Noon, and is subject to change or withdra
 
 """
 
+from __future__ import annotations
+
 __author__ = "Alistair Galbraith"
 __copyright__ = "Copyright 2018, Alistair Galbraith"
 
@@ -115,7 +117,6 @@ class NoonEntity(object):
     def fromJsonObject(cls, noon, json):
 
         raise NoonInvalidJsonError
-        return False
 
 class NoonSpace(NoonEntity):
 
@@ -311,7 +312,7 @@ class NoonDevice(NoonEntity):
     #def name(self):
     #    return self._name
     @property
-    def line(self):
+    def line(self) -> NoonLine:
         return self._noon.lines.get(self._line.get("guid"))
     #@property
     #def type(self):
@@ -331,14 +332,14 @@ class NoonDevice(NoonEntity):
 
     
 
-    def __init__(self, noon, space: NoonSpace, guid, name: str, capabilities: Dict, batteryLevel: int, base: Dict, line, scenesAllowed: bool, isMaster: bool, isOnline: bool, softwareVersion: str):
+    def __init__(self, noon: Noon, space: NoonSpace, guid: str, name: str, capabilities: Dict, batteryLevel: int, base: Dict, line: str | NoonLine, scenesAllowed: bool, isMaster: bool, isOnline: bool, softwareVersion: str):
         
         """Initializes the Space."""
         self._parentSpace: NoonSpace = space
         self._capabilities = capabilities
         self._batteryLevel = batteryLevel
         self._base = base
-        self._line = line
+        self._line = line if isinstance('string', line) else line.guid
         self._scenesAllowed = scenesAllowed
         self._isMaster = isMaster
         self._isOnline = isOnline
@@ -346,7 +347,7 @@ class NoonDevice(NoonEntity):
         super(NoonDevice, self).__init__(noon, guid, name)
 
     @classmethod
-    def fromJsonObject(cls, noon, space: NoonSpace, json: Dict):
+    def fromJsonObject(cls, noon: Noon, space: NoonSpace, json: Dict):
 
         """Sanity Check"""
         if not isinstance(noon, Noon):
@@ -377,7 +378,7 @@ class NoonDevice(NoonEntity):
 
     def __str__(self):
         """Returns a pretty-printed string for this object."""
-        return 'Line name: "%s"' % (
+        return 'Device name: "%s"' % (
             self._name)
 
     def __repr__(self):
