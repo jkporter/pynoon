@@ -312,7 +312,7 @@ class NoonDevice(NoonEntity):
     #    return self._name
     @property
     def line(self):
-        return self._noon.devices.get[self._line.get("guid")]
+        return self._noon.lines.get(self._line.get("guid"))
     #@property
     #def type(self):
     #    return self._type
@@ -377,7 +377,7 @@ class NoonDevice(NoonEntity):
 
     def __str__(self):
         """Returns a pretty-printed string for this object."""
-        return 'Line name: "%s" lights on: %s, dim level: "%s"' % (
+        return 'Line name: "%s"' % (
             self._name)
 
     def __repr__(self):
@@ -702,7 +702,7 @@ class Noon(object):
         queryUrl = "{}/api/query".format(self.__endpoints["query"])
         result = self.__session.post(queryUrl, headers={"Authorization": "Token {}".format(self.__token), "Content-Type":"application/graphql"}, data="{ lease { structure { guid, name, icon, sceneOrder, spaces { name, icon, guid, type, lightsOn, lightingConfigModified, devices { name, guid, type, isMaster, isOnline, displayName, softwareVersion, expectedSoftwareVersion, batteryLevel, expectedLinesGuid, actualLinesGuid, expectedScenesGuid, actualScenesGuid, scenesAllowed, line { guid }, otaState { guid, type, retryCount, installState, percentDownloaded }, base { guid, firmwareVersion, serial, capabilities { dimming, powerRating } }, capabilities { iconSet, maxScenes, hue, gridView, dimmingBase, dimming, wholeHomeScenes } }, lines {  guid, displayName, lineState, dimmingLevel, dimmable, remoteControllable, bulbType, multiwayMaster { guid }, lights { guid, fixtureType, bulbBrand, bulbQuantity }, externalDevices { externalId, isOnline} }, subspaces { guid, name, lines { guid }, type }, sceneOrder,  activeSceneSchedule { guid }, scenes { guid, icon, name, type, isActive, lightLevels { recommendedMax, recommendedMin, value, lineState, line { guid, lineState, dimmingLevel, displayName, bulbType, remoteControllable } } }, activeScene { guid, name, icon } } } } }").json()
         if isinstance(result, dict) and isinstance(result.get("lease").get("structure").get("spaces"), list):
-            for space in result.get("spaces"):
+            for space in result.get("lease").get("structure").get("spaces"):
 
                 # Create the space
                 thisSpace = NoonSpace.fromJsonObject(self, space)
