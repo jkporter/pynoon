@@ -21,7 +21,7 @@ import datetime
 from typing import Any, Callable, Dict, Type
 
 from pynoon.const import (
-    LOGIN_URL, DEX_URL
+    LOGIN_URL, RENEW_TOKEN_URL, DEX_URL
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -300,26 +300,53 @@ class NoonDevice(NoonEntity):
     def capabilities(self) -> Dict:
         return self._capabilities
     @property
-    def name(self) -> str:
-        return self._name
+    def serial(self) -> str:
+        return self._serial
+    @property
+    def displayName(self) -> str:
+        return self.displayName
     @property
     def batteryLevel(self) -> int:
         return self._batteryLevel
     @property
     def base(self) -> Dict:
         return self._base
-    #@property
-    #def name(self):
-    #    return self._name
+    @property
+    def mode(self) -> str:
+        return self._mode
+    @property
+    def name(self) -> str:
+        return self._name
+    @property
+    def dimmingAllowed(self) -> bool:
+        return self._dimmingAllowed
+    @property
+    def hardwareRevision(self) -> str:
+        return self._hardwareRevision
     @property
     def line(self) -> NoonLine:
         return self._noon.lines.get(self._line.get("guid"))
-    #@property
-    #def type(self):
-    #    return self._type
+    @property
+    def activeDimmingCurve(self) -> int:
+        return self._activeDimmingCurve
+    @property
+    def type(self) -> str:
+        return self._type
     @property
     def scenesAllowed(self) -> bool:
         return self._scenesAllowed
+    @property
+    def expectedSoftwareVersion(self) -> str:
+        return self._expectedSoftwareVersion
+    @property
+    def apRssi(self) -> int:
+        return self._apRssi
+    @property
+    def currentSamplingState(self) -> str:
+        return self._currentSamplingState
+    @property
+    def modelNumber(self) -> str:
+        return self._modelNumber
     @property
     def isMaster(self) -> bool:
         return self._isMaster
@@ -329,8 +356,6 @@ class NoonDevice(NoonEntity):
     @property
     def softwareVersion(self) -> str:
         return self._softwareVersion
-
-    
 
     def __init__(self, noon: Noon, space: NoonSpace, guid: str, name: str, capabilities: Dict, batteryLevel: int, base: Dict, line: str | NoonLine, scenesAllowed: bool, isMaster: bool, isOnline: bool, softwareVersion: str):
         
@@ -564,7 +589,9 @@ class Noon(object):
         # Key internal flags
         self.__authenticated = False
         self.__token = None
+        self.__loginResponse = None
         self.__tokenValidUntil = datetime.datetime.now()
+        self.__tokenRenewValidUntil = datetime.datetime.now()
         self.__session = requests.Session()
         self.__subscribed = False
 
@@ -606,7 +633,14 @@ class Noon(object):
 
         """ Authenticate user, and get tokens """
         _LOGGER.debug("No valid token or token expired. Authenticating...")
-        result = self.__session.post(LOGIN_URL, json={"email": self.__username, "password": self.__password}).json()
+        if(self.__tokenRenewValidUntil > datetime.datetime.now()):
+            url = LOGIN_URL
+            json = {"email": self.__username, "password": self.__password}
+        else:
+            url = RENEW_TOKEN_URL
+            json = self.__loginResponse
+
+        result = self.__session.post(url, json=json).json()
         if isinstance(result, dict) and result.get("token") is not None:
 
             """ Debug """
@@ -614,8 +648,10 @@ class Noon(object):
 
             """ Store the token and expiry time """
             self.authenticated = True
+            self.__loginResponse = result
             self.__token = result.get("token")
             self.__tokenValidUntil = datetime.datetime.now() + datetime.timedelta(seconds = (result.get("lifetime",0)-30))
+            self.__tokenRenewValidUntil = datetime.datetime.now() + datetime.timedelta(seconds = (result.get("renewLifetime",0)-30))
             _LOGGER.debug("Authenticated. Token expires at {:%H:%M:%S}.".format(self.__tokenValidUntil))
             
             """ Get endpoints if needed """
