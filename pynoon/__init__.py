@@ -19,7 +19,7 @@ import datetime
 from typing import Any, Callable, Dict, Type
 
 from pynoon.const import (
-    LOGIN_URL, DEX_URL
+    LOGIN_URL, RENEW_TOKEN_URL, DEX_URL
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -461,8 +461,10 @@ class Noon(object):
 
         # Key internal flags
         self.__authenticated = False
+        self.__loginResponse = None
         self.__token = None
         self.__tokenValidUntil = datetime.datetime.now()
+        self.__tokenRenewValidUntil = datetime.datetime.now()
         self.__session = requests.Session()
         self.__subscribed = False
 
@@ -503,7 +505,14 @@ class Noon(object):
 
         """ Authenticate user, and get tokens """
         _LOGGER.debug("No valid token or token expired. Authenticating...")
-        result = self.__session.post(LOGIN_URL, json={"email": self.__username, "password": self.__password}).json()
+        if(self.__tokenRenewValidUntil > datetime.datetime.now()):
+            url = RENEW_TOKEN_URL
+            json = self.__loginResponse
+        else:
+            url = LOGIN_URL
+            json = {"email": self.__username, "password": self.__password}
+
+        result = self.__session.post(url, json=json).json()
         if isinstance(result, dict) and result.get("token") is not None:
 
             """ Debug """
@@ -511,8 +520,10 @@ class Noon(object):
 
             """ Store the token and expiry time """
             self.authenticated = True
+            self.__loginResponse = result
             self.__token = result.get("token")
             self.__tokenValidUntil = datetime.datetime.now() + datetime.timedelta(seconds = (result.get("lifetime",0)-30))
+            self.__tokenRenewValidUntil = datetime.datetime.now() + datetime.timedelta(seconds = (result.get("renewLifetime",0)-30))
             _LOGGER.debug("Authenticated. Token expires at {:%H:%M:%S}.".format(self.__tokenValidUntil))
             
             """ Get endpoints if needed """
