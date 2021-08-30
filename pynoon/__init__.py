@@ -616,6 +616,11 @@ class Noon(object):
         else:
             _LOGGER.error("Already attached to event stream!")
 
+    def disconnect(self):
+        if self.__subscribed:
+            self.__subscribed = False
+            kwargs = {"status" : websocket.STATUS_NORMAL}
+            self.__websocket.close(**kwargs)
 
     def _thread_event_function(self):
         self.__subscribed = True
@@ -668,7 +673,7 @@ class Noon(object):
         self.__errorCount = 0
 
 
-    def _websocket_disconnected(self):
+    def _websocket_disconnected(self, retryConnection):
 
         """ Flag disconnected """
         self.__subscribed = False
@@ -677,7 +682,7 @@ class Noon(object):
         if self.__lastConnectAttempt < (datetime.datetime.now() - datetime.timedelta(seconds = 30)):
             _LOGGER.error("Failed to open websocket connection on first attempt. Giving up.")
             raise NoonException
-        else:
+        elif retryConnection:
             self.connect()
 
     def _websocket_message(self, message):
@@ -721,10 +726,10 @@ def _on_websocket_error(ws, error):
 
         _LOGGER.error("Websocket: Error - {}".format(error))
 
-def _on_websocket_close(ws): 
+def _on_websocket_close(ws, status_code, message): 
 
         _LOGGER.error("Websocket: Closed")
-        ws.parent._websocket_disconnected()
+        ws.parent._websocket_disconnected(ws.parent._Noon__subscribed)
 
 def _on_websocket_open(ws): 
 
